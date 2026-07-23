@@ -6,7 +6,7 @@ plus the sensor simulation used to test them. Designed to plug into any GTPL
 vehicle, not tied to a specific airframe.
 
 > **Provenance:** Reorganized **by function** in July 2026 from the monolithic
-> [`Propulsive-Landers-GT/MonopropUAV`](https://github.com/Propulsive-Landers-GT/MonopropUAV)
+> [`GTPL-Testing/MonopropUAV`](https://github.com/GTPL-Testing/MonopropUAV)
 > repo (was `Sensing&Controls/`). Full commit history is preserved, including the
 > original feature branches that carried estimation work (e.g. `rust-ekf`,
 > `dynamics_model`, `integrate-sim-and-control-loop`). See the
