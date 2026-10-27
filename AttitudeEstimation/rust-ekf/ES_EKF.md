@@ -7,6 +7,12 @@ to that math, how to run it, and the current limitations / roadmap.
 
 For the classic (Euler-angle) EKF, see the main [README](README.md).
 
+> **See also:** `src/bare_es_ekf/` is a no-heap version of this filter (fixed-size matrices, no `std`) that
+> covers most of the limitations and roadmap below: physical Q from IMU noise densities, magnetometer yaw
+> aid, Joseph form and symmetrising, chi-squared gating, the covariance reset, the exact attitude transition,
+> static alignment (TRIAD), configurable noise, and a simulated-flight system test with ground truth. See the
+> README's *Bare ES-EKF template* section.
+
 ---
 
 ## 1. Why an error-state filter?
