@@ -1,4 +1,5 @@
 pub mod ekf;
+pub mod bare_es_ekf;
 pub mod es_ekf;
 pub mod models;
 

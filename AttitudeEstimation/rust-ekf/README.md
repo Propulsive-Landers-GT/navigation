@@ -10,6 +10,7 @@ A Rust implementation of the Extended Kalman Filter. This library provides a gen
   - **Attitude Estimation**: For orientation estimation
   - **XY Position**: For 2D position tracking
 - **Error-State EKF (ES-EKF)**: A quaternion-based error-state filter for full inertial navigation (position, velocity, attitude, and IMU biases). Avoids the gimbal-lock and unit-norm problems of the Euler-angle EKF. See [ES_EKF.md](ES_EKF.md) for the full theory, math, and usage.
+- **Bare ES-EKF template (`bare_es_ekf`)**: a no-heap error-state filter on fixed-size nalgebra matrices (no `std`, so it also runs on a microcontroller), with a model trait, a generic filter and a complete 15-state INS model, validated by a simulated-flight system test. The starting point for new estimators. See [Bare ES-EKF](#bare-es-ekf-template-bare_es_ekf).
 
 ## Project Structure
 
@@ -24,6 +25,13 @@ src/
 │   ├── mod.rs               # ES-EKF module exports
 │   ├── filter.rs            # ErrorStateKalmanFilter implementation
 │   └── model.rs             # ESEKFModel trait definition
+├── bare_es_ekf/             # Bare-metal ES-EKF template (no heap, no std)
+│   ├── mod.rs               # Module exports
+│   ├── math.rs              # Linear algebra and rotation helpers
+│   ├── model.rs             # BareESEKFModel trait definition
+│   ├── filter.rs            # BareESEKF: predict, gated update, injection, reset
+│   ├── full_state.rs        # FullState: 15-state INS model, TRIAD alignment, VN-200 noise
+│   └── system_test.rs       # System test: simulated flights with faults
 ├── models/                  # Pre-built models
 │   ├── mod.rs               # Model exports and type aliases
 │   ├── altitude.rs          # Altitude estimation model
@@ -235,6 +243,45 @@ Run the smoke-test driver with `cargo run --bin esekf_test`.
 
 See **[ES_EKF.md](ES_EKF.md)** for the full theory, the math and its code mapping,
 usage examples, current limitations, and the roadmap to a production implementation.
+
+## Bare ES-EKF template (`bare_es_ekf`)
+
+`src/bare_es_ekf/` is an error-state EKF written for bare-metal targets: every matrix is a fixed-size
+nalgebra type (no heap, no `ndarray`), and it only uses `core` and nalgebra, so the same files build for a
+PC and for a microcontroller (the monoprop vehicle uses an identical copy in
+`monoprop-flight-software/Monoprop/Estimation`). It mirrors the structure of `ekf/` and `es_ekf/`:
+
+- `model.rs`: the `BareESEKFModel<E>` trait (E = error-state size): nominal propagation, the transition
+  Jacobian F, the process noise Q, error injection and the covariance reset.
+- `filter.rs`: the generic `BareESEKF<Model, E>`: `predict(&input, dt)` and
+  `update(&innovation, &H, &R, gate) -> UpdateOutcome`, with non-finite rejection, chi-squared gating,
+  a Cholesky solve, the Joseph form, injection and the reset `P <- G P Gᵀ`.
+- `full_state.rs`: `FullState`, the reference model: 15-state INS (position, velocity, attitude, accelerometer
+  and gyro biases) driven by the IMU, with position (GPS/UWB), magnetometer and height (barometer/lidar)
+  updates, TRIAD alignment and the VN-200 noise model. ENU navigation frame.
+- `math.rs`: the matrix and rotation helpers it needs.
+
+```rust
+use rust_ekf::bare_es_ekf::*;
+
+let model = FullState::new(ImuSpec::vn200(200.0));          // IMU noise model at 200 Hz
+let Some(mut filter) = FullStateESEKF::align(model, &accel0, &mag0, &pos0, 0.5) else { return };
+
+filter.predict(&ImuSample { accel, gyro }, dt);              // every IMU sample
+filter.update_position(&position, 0.5);                      // when a position fix arrives
+filter.update_mag(&mag, 0.02);                               // magnetometer (only its direction is used)
+filter.update_height(height, 0.1);                           // barometer / lidar
+
+let x = filter.get_state();                                  // x.p, x.v, x.q, x.ab, x.wb
+```
+
+**A new estimator:** copy `full_state.rs`, define your nominal state, input and dynamics, implement
+`BareESEKFModel<E>` for your model, add each sensor as a method in an `impl BareESEKF<YourModel, E>` block
+that calls `self.update(...)`, and add your scenario to `system_test.rs`.
+
+**Test:** `cargo test --lib bare_es_ekf -- --nocapture` runs one system test: simulated flights with VN-200
+noise and random biases (checked for accuracy and NEES consistency), a 30 m position glitch, a 10 s position
+dropout, and NaN / degenerate input. About a minute in a debug build.
 
 ## Model Tuning Tips
 
